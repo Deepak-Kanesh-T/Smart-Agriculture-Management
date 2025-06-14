@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard">
+    <h2>Welcome, {{ username }}!</h2>
+    
+    <div class="cards">
+        <div class="card">
+            <h3>Weather Forecast</h3>
+            <p>Get accurate weather predictions for your location</p>
+            <a href="{{ url_for('weather_forecast') }}" class="btn">Check Weather</a>
+        </div>
+        
+        <div class="card">
+            <h3>Crop Recommendation</h3>
+            <p>Find the best crops for your soil and climate</p>
+            <a href="{{ url_for('crop_recommendation') }}" class="btn">Get Recommendations</a>
+        </div>
+        
+        <div class="card">
+            <h3>Disease Detection</h3>
+            <p>Upload plant images to detect diseases</p>
+            <a href="{{ url_for('disease_detection') }}" class="btn">Detect Diseases</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

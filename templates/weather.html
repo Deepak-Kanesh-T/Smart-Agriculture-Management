@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="weather-container">
+    <h2>Weather Forecast</h2>
+    
+    <form method="POST">
+        <div class="form-group">
+            <label for="location">Location:</label>
+            <input type="text" id="location" name="location" required>
+        </div>
+        <div class="form-group">
+            <label for="days">Forecast Days (1-7):</label>
+            <input type="number" id="days" name="days" min="1" max="7" value="3" required>
+        </div>
+        <button type="submit">Get Forecast</button>
+    </form>
+    
+    {% if forecast_data %}
+        <div class="current-weather">
+            <h3>Current Weather in {{ forecast_data.city }}</h3>
+            <div class="weather-card">
+                <img src="http://openweathermap.org/img/wn/{{ forecast_data.current.icon }}@2x.png" alt="Weather icon">
+                <div>
+                    <p>Temperature: {{ forecast_data.current.temp }}°C</p>
+                    <p>Humidity: {{ forecast_data.current.humidity }}%</p>
+                    <p>Pressure: {{ forecast_data.current.pressure }} hPa</p>
+                    <p>Wind Speed: {{ forecast_data.current.wind_speed }} m/s</p>
+                    <p>Conditions: {{ forecast_data.current.description }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="forecast">
+            <h3>Weather Forecast for Next {{ forecast_data.forecast|length }} Days</h3>
+            <div class="forecast-days">
+                {% for day in forecast_data.forecast %}
+                <div class="forecast-day">
+                    <h4>{{ day.date }}</h4>
+                    <div class="temp-range">
+                        <span class="min-temp">{{ day.min_temp|round(1) }}°C</span>
+                        <div class="temp-bar">
+                            <div class="temp-indicator" style="width: {{ ((day.avg_temp - day.min_temp) / (day.max_temp - day.min_temp)) * 100 }}%"></div>
+                        </div>
+                        <span class="max-temp">{{ day.max_temp|round(1) }}°C</span>
+                    </div>
+                    <p>Average: {{ day.avg_temp|round(1) }}°C</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
