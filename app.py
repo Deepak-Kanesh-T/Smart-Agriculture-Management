@@ -6,6 +6,7 @@ import numpy as np
 from prophet import Prophet
 import pandas as pd
 import chromadb
+import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 from PIL import Image
@@ -15,10 +16,10 @@ from datetime import datetime
 import requests
 
 app = Flask(__name__)
-app.secret_key = ''
+app.secret_key = '12345_don'
 
 # MongoDB configuration
-app.config["MONGO_URI"] = "mongodb://localhost:27017/"
+app.config["MONGO_URI"] = "mongodb://localhost:27017/smart-agri"
 mongo = PyMongo(app)
 
 # ChromaDB configuration
@@ -26,32 +27,27 @@ chroma_client = chromadb.Client()
 disease_collection = chroma_client.create_collection(name="disease_embeddings")
 
 # Load ML models
-with open('models/crop_model.pkl', 'rb') as f:
+with open('models/random_forest_classifier.pkl', 'rb') as f:
     crop_model = pickle.load(f)
-
+#crop_model = load_model('models/crop_model.h5')
 disease_model = load_model('models/disease_model.h5')
 
-with open('models/weather_prophet.pkl', 'rb') as f:
+with open('weather_model/scaler.pkl', 'rb') as f:
     weather_model = pickle.load(f)
 
 # Disease classes
-disease_classes = ['Apple_scab', 'Apple_black_rot', 'Apple_cedar_rust', 
-                   'Apple_healthy', 'Blueberry_healthy', 'Cherry_healthy',
-                   'Cherry_powdery_mildew', 'Corn_common_rust', 'Corn_healthy',
-                   'Corn_northern_leaf_blight', 'Grape_black_rot', 'Grape_healthy',
-                   'Grape_leaf_blight', 'Grape_esca', 'Orange_haunglongbing',
-                   'Peach_bacterial_spot', 'Peach_healthy', 'Pepper_bacterial_spot',
-                   'Pepper_healthy', 'Potato_early_blight', 'Potato_healthy',
-                   'Potato_late_blight', 'Raspberry_healthy', 'Soybean_healthy',
-                   'Squash_powdery_mildew', 'Strawberry_healthy',
-                   'Strawberry_leaf_scorch', 'Tomato_bacterial_spot',
-                   'Tomato_early_blight', 'Tomato_healthy', 'Tomato_late_blight',
-                   'Tomato_leaf_mold', 'Tomato_septoria_leaf_spot',
-                   'Tomato_spider_mites', 'Tomato_target_spot',
-                   'Tomato_mosaic_virus', 'Tomato_yellow_leaf_curl_virus']
+disease_classes = ["Potato___Late_blight", "Tomato__Target_Spot", "Tomato__Tomato_mosaic_virus", "Tomato__Tomato_YellowLeaf__Curl_Virus", "Tomato_Bacterial_spot", "Tomato_Early_blight","Tomato_healthy",
+"Tomato_Late_blight",
+"Tomato_Leaf_Mold",
+"Tomato_Septoria_leaf_spot",
+"Tomato_Spider_mites_Two_spotted_spider_mite",
+"Pepper__bell___Bacterial_spot",
+"Pepper__bell___healthy",
+"Potato___Early_blight",
+"Potato___healthy"]
 
 # OpenWeatherMap API key
-OWM_API_KEY = 'your_openweathermap_api_key'
+OWM_API_KEY = 'http://api.weatherapi.com/v1/current.json?key=5bd197a93e954a69bf634259251606&q=10.9974, 76.9589&days=5'
 
 @app.route('/')
 def home():
@@ -92,6 +88,7 @@ def register():
             flash('Registration successful. Please login.')
             return redirect(url_for('login'))
     
+    
     return render_template('login.html', register=True)
 
 @app.route('/logout')
@@ -106,7 +103,7 @@ def dashboard():
     
     return render_template('dashboard.html', username=session['username'])
 
-"""@app.route('/weather', methods=['GET', 'POST'])
+@app.route('/weather', methods=['GET', 'POST'])
 def weather_forecast():
     if 'username' not in session:
         return redirect(url_for('login'))
@@ -118,12 +115,12 @@ def weather_forecast():
         
         # Get current weather
         current_weather = requests.get(
-            f'http://api.openweathermap.org/data/2.5/weather?q={location}&appid={OWM_API_KEY}&units=metric'
+            f'http://api.weatherapi.com/v1/current.json?key=5bd197a93e954a69bf634259251606&q={10.9974, 76.9589}9&days=4'
         ).json()
         
         # Generate future dates
-        future = weather_model.make_future_dataframe(periods=days)
-        forecast = weather_model.predict(future)
+        # future = weather_model.make_future_dataframe(periods=days)
+        # forecast = weather_model.predict(future)
         
         # Prepare forecast data
         forecast_data = {
@@ -133,12 +130,12 @@ def weather_forecast():
                 'description': current_weather['weather'][0]['description'],
                 'icon': current_weather['weather'][0]['icon']
             },
-            'forecast': forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(days).to_dict('records')
+            # 'forecast': forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(days).to_dict('records')
         }
     
-    return render_template('weather.html', forecast=forecast_data)"""
+    return render_template('weather.html', forecast=forecast_data)
 
-@app.route('/weather', methods=['GET', 'POST'])
+"""@app.route('/weather', methods=['GET', 'POST'])
 def weather_forecast():
     if 'username' not in session:
         return redirect(url_for('login'))
@@ -151,15 +148,16 @@ def weather_forecast():
         try:
             # Get current weather from API
             current_weather = requests.get(
-                f'http://api.openweathermap.org/data/2.5/weather?q={location}&appid={OWM_API_KEY}&units=metric'
+                #f'http://api.openweathermap.org/data/2.5/weather?q={location}&appid={OWM_API_KEY}&units=metric'
+                f'http://api.weatherapi.com/v1/current.json?key=5bd197a93e954a69bf634259251606&q={10.9974, 76.9589}9&days=4'
             ).json()
             
             # Load model and preprocessors
             weather_preprocessor = None
-            with open('models/weather_preprocessor.pkl', 'rb') as f:
+            with open('weather_model/scaler.pkl', 'rb') as f:
                 weather_preprocessor = pickle.load(f)
             
-            model = tf.keras.models.load_model('models/weather_model.h5')
+            model = load_model('weather_model/lstm_model.h5')
             
             # Get historical data for the selected city
             weather_data = load_and_preprocess_weather_data()
@@ -226,15 +224,21 @@ def weather_forecast():
     
     return render_template('weather.html', forecast=forecast_data)
 
+# List of crops corresponding to model output"""
+crop_labels = [
+    "apple", "banana", "blackgram", "chickpea", "coconut", "coffee", "cotton", 
+    "grapes", "jute", "kidneybeans", "lentil", "maize", "mango", "mothbeans", 
+    "mungbean", "muskmelon", "orange", "papaya", "pigeonpeas", "pomegranate", 
+    "rice", "watermelon"
+]
 
 @app.route('/crop-recommendation', methods=['GET', 'POST'])
 def crop_recommendation():
     if 'username' not in session:
         return redirect(url_for('login'))
-    
+
     recommendation = None
     if request.method == 'POST':
-        # Get form data
         nitrogen = float(request.form['nitrogen'])
         phosphorus = float(request.form['phosphorus'])
         potassium = float(request.form['potassium'])
@@ -242,16 +246,18 @@ def crop_recommendation():
         humidity = float(request.form['humidity'])
         ph = float(request.form['ph'])
         rainfall = float(request.form['rainfall'])
-        
-        # Make prediction
+
         input_data = np.array([[nitrogen, phosphorus, potassium, temperature, humidity, ph, rainfall]])
-        prediction = crop_model.predict(input_data)
-        
-        recommendation = prediction[0]
-    
+        prediction = crop_model.predict(input_data)  # prediction is array of probabilities
+
+        predicted_index = np.argmax(prediction)
+        recommendation = crop_labels[predicted_index]  # Convert index to crop name
+
     return render_template('crop.html', recommendation=recommendation)
 
-"""@app.route('/disease-detection', methods=['GET', 'POST'])
+    
+  
+@app.route('/disease-detection', methods=['GET', 'POST'])
 def disease_detection():
     if 'username' not in session:
         return redirect(url_for('login'))
@@ -270,7 +276,7 @@ def disease_detection():
         if file:
             # Save the image temporarily
             img = Image.open(io.BytesIO(file.read()))
-            img = img.resize((224, 224))
+            img = img.resize((160, 160))
             img_array = image.img_to_array(img)
             img_array = np.expand_dims(img_array, axis=0)
             img_array = img_array / 255.0
@@ -295,101 +301,6 @@ def disease_detection():
             }
     
     return render_template('disease.html', result=result)
-"""
-# Update the model loading section in app.py
 
-# Load crop recommendation model
-crop_model = tf.keras.models.load_model('models/crop_model.h5')
-with open('models/crop_preprocessor.pkl', 'rb') as f:
-    crop_preprocessor = pickle.load(f)
-
-# Load disease detection model
-disease_model = tf.keras.models.load_model('models/disease_model.h5')
-with open('models/class_indices.pkl', 'rb') as f:
-    class_indices = pickle.load(f)
-disease_classes = {v: k for k, v in class_indices.items()}
-
-# Load weather forecasting model
-weather_model = tf.keras.models.load_model('models/weather_model.h5')
-with open('models/weather_preprocessor.pkl', 'rb') as f:
-    weather_preprocessor = pickle.load(f)
-
-# Update the crop recommendation endpoint
-@app.route('/crop-recommendation', methods=['GET', 'POST'])
-def crop_recommendation():
-    if 'username' not in session:
-        return redirect(url_for('login'))
-    
-    recommendation = None
-    if request.method == 'POST':
-        # Get form data
-        features = [
-            float(request.form['nitrogen']),
-            float(request.form['phosphorus']),
-            float(request.form['potassium']),
-            float(request.form['temperature']),
-            float(request.form['humidity']),
-            float(request.form['ph']),
-            float(request.form['rainfall'])
-        ]
-        
-        # Preprocess
-        scaled_features = crop_preprocessor['scaler'].transform([features])
-        prediction = crop_model.predict(scaled_features)
-        predicted_class = np.argmax(prediction[0])
-        recommendation = crop_preprocessor['encoder'].inverse_transform([predicted_class])[0]
-    
-    return render_template('crop.html', recommendation=recommendation)
-
-# Update the weather forecast endpoint
-@app.route('/weather', methods=['GET', 'POST'])
-def weather_forecast():
-    if 'username' not in session:
-        return redirect(url_for('login'))
-    
-    forecast_data = None
-    if request.method == 'POST':
-        location = request.form['location']
-        days = int(request.form['days'])
-        
-        # Get current weather from API
-        current_weather = requests.get(
-            f'http://api.openweathermap.org/data/2.5/weather?q={location}&appid={OWM_API_KEY}&units=metric'
-        ).json()
-        
-        # Generate future dates
-        future_dates = pd.date_range(
-            start=pd.Timestamp.now(),
-            periods=days,
-            freq='D'
-        )
-        
-        # Prepare features
-        future_df = pd.DataFrame({
-            'day_of_year': future_dates.dayofyear,
-            'year': future_dates.year
-        })
-        
-        # Scale and predict
-        X_future = weather_preprocessor['X_scaler'].transform(future_df)
-        X_future_reshaped = X_future.reshape((X_future.shape[0], 1, X_future.shape[1]))
-        y_pred_scaled = weather_model.predict(X_future_reshaped)
-        y_pred = weather_preprocessor['y_scaler'].inverse_transform(y_pred_scaled).flatten()
-        
-        # Prepare forecast data
-        forecast_data = {
-            'current': {
-                'temp': current_weather['main']['temp'],
-                'humidity': current_weather['main']['humidity'],
-                'description': current_weather['weather'][0]['description'],
-                'icon': current_weather['weather'][0]['icon']
-            },
-            'forecast': [{
-                'ds': str(date),
-                'yhat': float(temp)
-            } for date, temp in zip(future_dates, y_pred)]
-        }
-    
-    return render_template('weather.html', forecast=forecast_data)
 if __name__ == '__main__':
     app.run(debug=True)

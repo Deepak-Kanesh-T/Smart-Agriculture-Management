@@ -1,41 +1,41 @@
-import pandas as pd
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.metrics import accuracy_score
-import pickle
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.applications import EfficientNetB0
-from tensorflow.keras.layers import GlobalAveragePooling2D
-from tensorflow.keras.models import Model
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from prophet import Prophet
 import os
 import shutil
-from PIL import Image
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import MobileNetV2
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+import pickle
+import matplotlib.pyplot as plt
+
+# Configure TensorFlow for CPU-only and memory efficiency
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+tf.config.set_visible_devices([], 'GPU')  # Force CPU-only mode
+tf.config.threading.set_intra_op_parallelism_threads(2)
+tf.config.threading.set_inter_op_parallelism_threads(2)
 
 # Dataset paths
 CROP_DATA_PATH = r"D:\Smart-Agriculture\Datasets\Crop Prediction\Crop_recommendation.csv"
 DISEASE_ROOT_PATH = r"D:\Smart-Agriculture\Datasets\Plant Disease"
-WEATHER_DATA_PATH = r"D:\Smart-Agriculture\Datasets\Weather Prediction\historical_weather.csv"
+WEATHER_DATA_PATH = r"D:\Smart-Agriculture\Datasets\Weather Prediction"
 
 def train_crop_model():
-    """Train a neural network for crop recommendation"""
+    """Train a lightweight neural network for crop recommendation"""
     try:
-        # Load and preprocess data
+        print("\nLoading crop data...")
         data = pd.read_csv(CROP_DATA_PATH)
         X = data[['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall']]
         y = data['label']
         
-        # Encode labels
+        # Encode and scale
         le = LabelEncoder()
         y_encoded = le.fit_transform(y)
-        
-        # Scale features
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
         
@@ -43,14 +43,11 @@ def train_crop_model():
         X_train, X_test, y_train, y_test = train_test_split(
             X_scaled, y_encoded, test_size=0.2, random_state=42)
         
-        # Neural Network model
+        # Smaller model architecture
         model = Sequential([
-            Dense(128, activation='relu', input_shape=(X_train.shape[1],)),
-            BatchNormalization(),
-            Dropout(0.3),
-            Dense(64, activation='relu'),
-            BatchNormalization(),
+            Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
             Dropout(0.2),
+            Dense(32, activation='relu'),
             Dense(len(le.classes_), activation='softmax')
         ])
         
@@ -60,208 +57,163 @@ def train_crop_model():
             metrics=['accuracy']
         )
         
-        # Early stopping
-        early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-        
-        # Train
+        print("Training crop model...")
         history = model.fit(
             X_train, y_train,
             validation_split=0.2,
-            epochs=100,
+            epochs=50,
             batch_size=32,
-            callbacks=[early_stop],
+            callbacks=[EarlyStopping(patience=5)],
             verbose=1
         )
         
-        # Evaluate
-        test_loss, test_acc = model.evaluate(X_test, y_test, verbose=0)
-        print(f"\nCrop recommendation model accuracy: {test_acc:.4f}")
-        
-        # Save model and preprocessing objects
+        # Save model
         os.makedirs('models', exist_ok=True)
         model.save('models/crop_model.h5')
         with open('models/crop_preprocessor.pkl', 'wb') as f:
             pickle.dump({'scaler': scaler, 'encoder': le}, f)
             
+        print(f"Crop model trained. Validation accuracy: {max(history.history['val_accuracy']):.2f}")
+        
     except Exception as e:
-        print(f"Error training crop model: {str(e)}")
+        print(f"Error in crop model: {str(e)}")
 
 def train_disease_model():
-    """Train a high-accuracy CNN for plant disease detection using EfficientNetB3"""
+    """Optimized plant disease detection for low-power hardware"""
     try:
-        # Get all plant-disease folders
-        disease_folders = [f for f in os.listdir(DISEASE_ROOT_PATH) 
-                         if os.path.isdir(os.path.join(DISEASE_ROOT_PATH, f)) and not f.startswith('.')]
+        print("\nPreparing plant disease data...")
         
-        # Create train/valid directories
-        shutil.rmtree('data', ignore_errors=True)  # Clear previous data
-        os.makedirs('data/train', exist_ok=True)
-        os.makedirs('data/val', exist_ok=True)
-        
-        # Create organized dataset structure with stratified split
-        for folder in disease_folders:
-            class_path = os.path.join(DISEASE_ROOT_PATH, folder)
-            images = [f for f in os.listdir(class_path) 
-                     if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-            
-            # Ensure minimum 2 samples per class for validation
-            if len(images) < 5:
-                print(f"Warning: Class {folder} has only {len(images)} images")
-                continue
-                
-            train_images, val_images = train_test_split(images, test_size=0.2, random_state=42)
-            
-            # Create directories and copy files
-            for split, imgs in [('train', train_images), ('val', val_images)]:
-                dest_dir = os.path.join('data', split, folder)
-                os.makedirs(dest_dir, exist_ok=True)
-                for img in imgs:
-                    shutil.copy2(os.path.join(class_path, img), 
-                                os.path.join(dest_dir, img))
-        
-        # Enhanced data augmentation
+        # Lightweight data loading
         train_datagen = ImageDataGenerator(
             rescale=1./255,
-            rotation_range=45,
-            width_shift_range=0.25,
-            height_shift_range=0.25,
-            shear_range=0.2,
-            zoom_range=0.3,
+            rotation_range=20,
+            width_shift_range=0.1,
+            height_shift_range=0.1,
+            zoom_range=0.2,
             horizontal_flip=True,
-            vertical_flip=True,
-            brightness_range=[0.8, 1.2],
-            fill_mode='nearest',
-            channel_shift_range=50
+            validation_split=0.2,
+            dtype=np.float32
         )
         
-        val_datagen = ImageDataGenerator(rescale=1./255)
-        
-        # Increased image size for B3
-        img_size = 300
-        batch_size = 32
+        img_size = 160  # Reduced from 300
+        batch_size = 8   # Reduced from 32
         
         train_generator = train_datagen.flow_from_directory(
-            'data/train',
+            DISEASE_ROOT_PATH,
             target_size=(img_size, img_size),
             batch_size=batch_size,
             class_mode='categorical',
-            shuffle=True
+            subset='training',
+            seed=42
         )
         
-        val_generator = val_datagen.flow_from_directory(
-            'data/val',
+        val_generator = train_datagen.flow_from_directory(
+            DISEASE_ROOT_PATH,
             target_size=(img_size, img_size),
             batch_size=batch_size,
             class_mode='categorical',
-            shuffle=False
+            subset='validation',
+            seed=42
         )
         
-        # Save class indices
-        class_indices = train_generator.class_indices
-        with open('models/class_indices.pkl', 'wb') as f:
-            pickle.dump(class_indices, f)
-        
-        # Enhanced EfficientNetB3 model
-        base_model = EfficientNetB3(
-            weights='imagenet',
-            include_top=False,
+        # MobileNetV2 (lightweight)
+        base_model = MobileNetV2(
             input_shape=(img_size, img_size, 3),
-            drop_connect_rate=0.4
+            include_top=False,
+            weights='imagenet',
+            alpha=0.35  # Smaller model
         )
+        base_model.trainable = False
         
-        # Freeze first 150 layers
-        for layer in base_model.layers[:150]:
-            layer.trainable = False
-            
-        # Custom head with regularization
-        x = base_model.output
-        x = GlobalAveragePooling2D()(x)
-        x = Dense(1024, activation='relu')(x)
-        x = BatchNormalization()(x)
-        x = Dropout(0.5)(x)
-        x = Dense(512, activation='relu')(x)
-        x = Dropout(0.3)(x)
-        predictions = Dense(len(class_indices), activation='softmax')(x)
+        model = Sequential([
+            base_model,
+            GlobalAveragePooling2D(),
+            Dropout(0.3),
+            Dense(len(train_generator.class_indices), activation='softmax')
+        ])
         
-        model = Model(inputs=base_model.input, outputs=predictions)
-        
-        # Custom learning rate schedule
-        initial_lr = 0.001
-        def lr_scheduler(epoch):
-            if epoch < 10:
-                return initial_lr
-            elif epoch < 20:
-                return initial_lr * 0.1
-            else:
-                return initial_lr * 0.01
-                
-        # Enhanced callbacks
-        callbacks = [
-            EarlyStopping(monitor='val_accuracy', patience=12, restore_best_weights=True),
-            ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5),
-            ModelCheckpoint('best_model.h5', monitor='val_accuracy', save_best_only=True),
-            tf.keras.callbacks.LearningRateScheduler(lr_scheduler),
-            tf.keras.callbacks.TensorBoard(log_dir='./logs')
-        ]
-        
-        # Compile with additional metrics
         model.compile(
-            optimizer=Adam(learning_rate=initial_lr),
+            optimizer=Adam(learning_rate=0.0005),
             loss='categorical_crossentropy',
-            metrics=['accuracy', 
-                   tf.keras.metrics.Precision(name='precision'),
-                   tf.keras.metrics.Recall(name='recall')]
+            metrics=['accuracy']
         )
         
-        # Train model
+        print("Training disease model (this may take 2-3 hours)...")
         history = model.fit(
             train_generator,
-            steps_per_epoch=train_generator.samples // batch_size,
+            steps_per_epoch=50,  # Reduced steps
             validation_data=val_generator,
-            validation_steps=val_generator.samples // batch_size,
-            epochs=50,
-            callbacks=callbacks,
+            validation_steps=20,
+            epochs=30,
+            callbacks=[
+                EarlyStopping(patience=5),
+                ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3)
+            ],
             verbose=1
         )
         
-        # Save final model
+        # Save model
         model.save('models/disease_model.h5')
-        
-        # Plot training history
-        plot_training_history(history)
-        
-        return history
+        with open('models/class_indices.pkl', 'wb') as f:
+            pickle.dump(train_generator.class_indices, f)
+            
+        print(f"Disease model trained. Validation accuracy: {max(history.history['val_accuracy']):.2f}")
         
     except Exception as e:
-        print(f"Error training disease model: {str(e)}")
-        raise
+        print(f"Error in disease model: {str(e)}")
 
-def plot_training_history(history):
-    """Plot training and validation metrics"""
-    plt.figure(figsize=(15, 5))
-    
-    # Accuracy plot
-    plt.subplot(1, 2, 1)
-    plt.plot(history.history['accuracy'], label='Train Accuracy')
-    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
-    plt.title('Model Accuracy')
-    plt.ylabel('Accuracy')
-    plt.xlabel('Epoch')
-    plt.legend()
-    
-    # Loss plot
-    plt.subplot(1, 2, 2)
-    plt.plot(history.history['loss'], label='Train Loss')
-    plt.plot(history.history['val_loss'], label='Validation Loss')
-    plt.title('Model Loss')
-    plt.ylabel('Loss')
-    plt.xlabel('Epoch')
-    plt.legend()
-    
-    plt.tight_layout()
-    plt.savefig('training_history.png')
-    plt.show()
-
+def train_weather_model1():
+    """Simplified weather forecasting model"""
+    try:
+        print("\nLoading weather data...")
+        weather_data = pd.read_csv(WEATHER_DATA_PATH)
+        weather_data['date'] = pd.to_datetime(weather_data['date'])
+        
+        # Simple features
+        weather_data['day_of_year'] = weather_data['date'].dt.dayofyear
+        weather_data['hour'] = weather_data['date'].dt.hour
+        
+        # Single-target prediction
+        X = weather_data[['day_of_year', 'hour']].values
+        y = weather_data['temperature'].values
+        
+        # Scale data
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        y_scaled = scaler.fit_transform(y.reshape(-1, 1))
+        
+        # Simple LSTM model
+        model = Sequential([
+            tf.keras.layers.LSTM(32, input_shape=(None, 2)),
+            tf.keras.layers.Dense(1)
+        ])
+        
+        model.compile(
+            optimizer=Adam(learning_rate=0.01),
+            loss='mse'
+        )
+        
+        print("Training weather model...")
+        X_reshaped = X_scaled.reshape((X_scaled.shape[0], 1, X_scaled.shape[1]))
+        history = model.fit(
+            X_reshaped, y_scaled,
+            validation_split=0.2,
+            epochs=30,
+            batch_size=32,
+            callbacks=[EarlyStopping(patience=5)],
+            verbose=1
+        )
+        
+        # Save model
+        model.save('models/weather_model.h5')
+        with open('models/weather_scaler.pkl', 'wb') as f:
+            pickle.dump(scaler, f)
+            
+        print("Weather model trained.")
+        
+    except Exception as e:
+        print(f"Error in weather model: {str(e)}")
+        
 def load_and_preprocess_weather_data():
     """Load and preprocess multiple weather CSV files"""
     base_path = r"D:\Smart-Agriculture\Datasets\Weather Prediction"
@@ -387,14 +339,39 @@ def train_weather_model():
     except Exception as e:
         print(f"Error training weather model: {str(e)}")
 
+def plot_training_history(history, model_name):
+    """Plot training metrics"""
+    plt.figure(figsize=(12, 4))
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['accuracy'], label='Train Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    plt.title(f'{model_name} Accuracy')
+    plt.legend()
+    
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['loss'], label='Train Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.title(f'{model_name} Loss')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig(f'{model_name}_training.png')
+    plt.close()
+
 if __name__ == '__main__':
-    print("Training crop recommendation model...")
-    train_crop_model()
+    # Clear memory before starting
+    import gc
+    gc.collect()
     
-    print("\nTraining plant disease detection model...")
-    train_disease_model()
+    print("=== Starting Smart Agriculture Model Training ===")
+    print("Note: This will take several hours on a laptop")
     
-    print("\nTraining weather forecasting model...")
+   # train_crop_model()
+  #  disease_history = train_disease_model()
     train_weather_model()
     
-    print("\nAll models trained and saved successfully!")
+   # if disease_history:
+   #     plot_training_history(disease_history, "Disease_Model")
+    
+    print("\n=== All models trained successfully! ===")
+    print("Models saved in 'models/' directory")

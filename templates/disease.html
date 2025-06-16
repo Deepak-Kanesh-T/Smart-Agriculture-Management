@@ -13,36 +13,16 @@
     </form>
     
     {% if result %}
-        <div class="result">
+        <div class="result mt-4">
             <h3>Detection Result:</h3>
             <div class="image-preview">
-                <img src="#" id="preview" alt="Uploaded plant image">
+                <img src="{{ url_for('static', filename=result.image) }}" id="preview" alt="Uploaded plant image" style="max-width: 300px; border-radius: 10px;">
                 <div class="diagnosis">
                     <p><strong>Diagnosis:</strong> {{ result.class }}</p>
                     <p><strong>Confidence:</strong> {{ result.confidence }}%</p>
                 </div>
             </div>
         </div>
-        
-        <script>
-            // Display the uploaded image
-            const fileInput = document.getElementById('image');
-            const preview = document.getElementById('preview');
-            
-            fileInput.addEventListener('change', function() {
-                const file = this.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        preview.src = e.target.result;
-                    }
-                    reader.readAsDataURL(file);
-                }
-            });
-            
-            // Set the preview image from the uploaded file
-            preview.src = "data:image/jpeg;base64," + "{{ result.image }}";
-        </script>
     {% endif %}
 </div>
 {% endblock %}

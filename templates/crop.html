@@ -46,11 +46,12 @@
         <button type="submit">Get Recommendation</button>
     </form>
     
-    {% if recommendation %}
-        <div class="result">
-            <h3>Recommended Crop:</h3>
-            <p class="recommendation">{{ recommendation }}</p>
-        </div>
-    {% endif %}
+   {% if recommendation is not none %}
+    <div class="result">
+        <h3>Recommended Crop:</h3>
+        <p class="recommendation">{{ recommendation|title }}</p>
+    </div>
+  {% endif %}
+
 </div>
 {% endblock %}
